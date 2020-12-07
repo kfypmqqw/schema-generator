@@ -56,7 +56,6 @@ function Wrapper(
     preview,
     setState,
     mapping,
-    widgets,
     selected,
     hovering,
     ...rest
@@ -67,7 +66,13 @@ function Wrapper(
   } else {
     _schema = combineSchema(schema.schema, schema.uiSchema);
   }
-  const flatten = flattenSchema(_schema);
+  const flatten = flattenSchema(
+    _schema,
+    undefined,
+    undefined,
+    undefined,
+    !simple,
+  );
   const flattenWithData = dataToFlatten(flatten, formData);
   // console.log(flatten);
 
@@ -121,7 +126,7 @@ function Wrapper(
     try {
       const info = transformFrom(looseJsonParse(local.schemaForImport));
       const { propsSchema, schema, ...rest } = info;
-      const result = {
+      let result = {
         schema: {
           schema,
         },
@@ -153,7 +158,8 @@ function Wrapper(
     if (schema.propsSchema) {
       displaySchema = transformTo({ propsSchema, ...rest });
     } else {
-      displaySchema = transformTo({ schema: propsSchema, ...rest });
+      let newVar = { schema: propsSchema, ...rest };
+      displaySchema = transformTo(newVar);
     }
     displaySchemaString = JSON.stringify(displaySchema, null, 2);
   } catch (error) {}
@@ -279,7 +285,7 @@ function Wrapper(
                 </Button> */}
               </div>
               <div className="dnd-container">
-                <FR preview={preview} />
+                <FR preview={preview} editArea={true} />
               </div>
             </div>
             <Right globalProps={rest} />

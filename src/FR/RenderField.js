@@ -12,7 +12,7 @@ const RenderField = ({
   children,
 }) => {
   const { onItemChange, flatten } = useStore();
-  const { schema, data } = item;
+  let { schema, data } = item;
   const {
     displayType,
     showDescIcon,
@@ -21,7 +21,8 @@ const RenderField = ({
     widgets,
     mapping,
   } = useGlobalProps();
-  const { type, title, description, required } = schema;
+
+  const { type, title, description, required, $required } = schema;
   const isRequired = required && required.length > 0;
 
   let widgetName = getWidgetName(schema, mapping);
@@ -89,7 +90,7 @@ const RenderField = ({
             }`} // checkbox不带冒号
             title={title}
           >
-            {isRequired && <span className="fr-label-required"> *</span>}
+            {$required && <span className="fr-label-required"> *</span>}
             <span
               className={`${isComplex ? 'b' : ''} ${
                 displayType === 'column' ? 'flex-none' : ''

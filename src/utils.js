@@ -1,5 +1,6 @@
 import nanoid from 'nanoid';
 import deepClone from 'clone';
+import { getWidgetName } from './mapping';
 
 function stringContains(str, text) {
   return str.indexOf(text) > -1;
@@ -215,10 +216,23 @@ export function isFunctionSchema(schema) {
 //   schema: ...,
 //   children: []
 // }
-export function flattenSchema(schema, name = '#', parent, result = {}) {
+export function flattenSchema(
+  schema,
+  name = '#',
+  parent,
+  result = {},
+  add$Type = false,
+) {
   const _schema = deepClone(schema);
   if (!_schema.$id) {
     _schema.$id = name; // 给生成的schema添加一个唯一标识，方便从schema中直接读取
+  }
+  // if (_schema.$id === "#/$type") {
+  //   _schema.enum = typeEnums;
+  //   _schema.enumNames = typeEnumNames;
+  // }
+  if (add$Type && name !== '#' && !_schema.$type) {
+    _schema.$type = getWidgetName(schema);
   }
   const children = [];
   const isObj = _schema.type === 'object' && _schema.properties;
@@ -228,7 +242,15 @@ export function flattenSchema(schema, name = '#', parent, result = {}) {
     Object.entries(_schema.properties).forEach(([key, value]) => {
       const uniqueName = name + '/' + key;
       children.push(uniqueName);
-      flattenSchema(value, uniqueName, name, result);
+      if (
+        _schema.required &&
+        _schema.required.includes(key) &&
+        !value.hasOwnProperty('$required')
+      ) {
+        value.$required = true;
+      }
+
+      flattenSchema(value, uniqueName, name, result, add$Type);
     });
     delete _schema.properties;
   }
@@ -236,7 +258,7 @@ export function flattenSchema(schema, name = '#', parent, result = {}) {
     Object.entries(_schema.items.properties).forEach(([key, value]) => {
       const uniqueName = name + '/' + key;
       children.push(uniqueName);
-      flattenSchema(value, uniqueName, name, result);
+      flattenSchema(value, uniqueName, name, result, add$Type);
     });
     delete _schema.items.properties;
   }
@@ -274,48 +296,69 @@ const copyFlattenItem = _item => {
 // 2. 修改$id的情况, 修改的是schema内的$id, 解析的时候要把schema.$id 作为真正的id (final = true的解析)
 export function idToSchema(flatten, id = '#', final = false) {
   let schema = {};
-  const _item = flatten[id];
-  const item = deepClone(_item);
-  if (item) {
-    schema = { ...item.schema };
-    // 最终输出去掉 $id
-    if (final) {
-      schema.$id && delete schema.$id;
+  try {
+    const _item = flatten[id];
+    const item = deepClone(_item);
+    if (item) {
+      schema = { ...item.schema };
+      // 最终输出去掉 $开头字段
+      if (final) {
+        schema.$id && delete schema.$id;
+        schema.$type && delete schema.$type;
+        schema['ui:options'] &&
+          !Object.values(schema['ui:options']).find(o => o !== undefined) &&
+          delete schema['ui:options'];
+      }
+      if (item.children.length > 0) {
+        item.children.forEach(child => {
+          let childId = child;
+          // TODO: 这个情况会出现吗？return会有问题吗？
+          if (!flatten[child]) {
+            return;
+          }
+          // 最终输出将所有的 key 值改了
+          try {
+            if (final) {
+              childId = flatten[child].schema.$id;
+            }
+          } catch (error) {
+            console.log('catch', error);
+          }
+          const key = getKeyFromUniqueId(childId);
+          if (schema.type === 'object') {
+            if (!schema.properties) {
+              schema.properties = {};
+            }
+            schema.properties[key] = idToSchema(flatten, child, final);
+          }
+          if (
+            schema.type === 'array' &&
+            schema.items &&
+            schema.items.type === 'object'
+          ) {
+            if (!schema.items.properties) {
+              schema.items.properties = {};
+            }
+            schema.items.properties[key] = idToSchema(flatten, child, final);
+          }
+        });
+        // 最终输出计算必填字段
+        if (final && schema.properties) {
+          let required = [];
+          Object.entries(schema.properties).forEach(([key, value]) => {
+            value.$required && required.push(key);
+            value.hasOwnProperty('$required') && delete value.$required;
+          });
+          if (required.length > 0) {
+            schema.required = required;
+          } else {
+            schema.hasOwnProperty('required') && delete schema.required;
+          }
+        }
+      }
     }
-    if (item.children.length > 0) {
-      item.children.forEach(child => {
-        let childId = child;
-        // TODO: 这个情况会出现吗？return会有问题吗？
-        if (!flatten[child]) {
-          return;
-        }
-        // 最终输出将所有的 key 值改了
-        try {
-          if (final) {
-            childId = flatten[child].schema.$id;
-          }
-        } catch (error) {
-          console.log('catch', error);
-        }
-        const key = getKeyFromUniqueId(childId);
-        if (schema.type === 'object') {
-          if (!schema.properties) {
-            schema.properties = {};
-          }
-          schema.properties[key] = idToSchema(flatten, child, final);
-        }
-        if (
-          schema.type === 'array' &&
-          schema.items &&
-          schema.items.type === 'object'
-        ) {
-          if (!schema.items.properties) {
-            schema.items.properties = {};
-          }
-          schema.items.properties[key] = idToSchema(flatten, child, final);
-        }
-      });
-    }
+  } catch (error) {
+    console.log('catch', error);
   }
   return schema;
 }
@@ -378,6 +421,20 @@ export const copyItem = (flatten, $id) => {
   } catch (error) {
     console.error(error, 'catcherror');
     return [flatten, $id];
+  }
+};
+
+export const changeItemType = (flatten, $id) => {
+  let newFlatten = { ...flatten };
+  try {
+    delete newFlatten[$id].schema['ui:widget'];
+    delete newFlatten[$id].schema['enum'];
+    delete newFlatten[$id].schema['enumNames'];
+    delete newFlatten[$id].schema.$type;
+    return newFlatten;
+  } catch (error) {
+    console.error(error, 'catcherror');
+    return flatten;
   }
 };
 
@@ -485,7 +542,7 @@ export const dropItem = ({ dragId, dragItem, dropId, position, flatten }) => {
   }
   // TODO: 这块的体验，现在这样兜底了，但是drag起一个元素了，应该让原本变空
   if (dropId.indexOf(dragId) > -1) {
-    return newFlatten;
+    return [newFlatten, dropId];
   }
 
   let newId = dragId;
@@ -544,6 +601,9 @@ export const dropItem = ({ dragId, dragItem, dropId, position, flatten }) => {
 // 解析函数字符串值
 // TODO: 没有考虑list的情况
 export const getDataById = (data, idString) => {
+  if (idString.indexOf('list_FUoN8e') > -1) {
+    console.log('getDataById,' + idString + ':' + JSON.stringify(data));
+  }
   if (idString === '#') return data;
   try {
     const idConnectedByDots = idString
@@ -572,7 +632,16 @@ export const dataToFlatten = (flatten, data) => {
   if (!flatten || !data) return;
   Object.entries(flatten).forEach(([id, item]) => {
     const branchData = getDataById(data, id);
-    flatten[id].data = branchData;
+    if (
+      branchData &&
+      flatten[id].schema.$type === 'list' &&
+      !Array.isArray(branchData)
+    ) {
+      flatten[id].data = flatten[id].data || [];
+      flatten[id].data.push(branchData);
+    } else {
+      flatten[id].data = branchData;
+    }
   });
   return flatten;
 };
@@ -609,6 +678,7 @@ export const flattenToData = (flatten, id = '#') => {
     }
     return result;
   } catch (error) {
+    console.error(error);
     return undefined;
   }
 };
@@ -627,6 +697,7 @@ export const getParentProps = (propName, id, flatten) => {
       }
     }
   } catch (error) {
+    console.error(error);
     return undefined;
   }
 };

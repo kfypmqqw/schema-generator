@@ -1,10 +1,22 @@
 import React, { useRef, useState } from 'react';
 import './Wrapper.css';
-import { useGlobal, useGlobalProps, useStore } from '../hooks';
-import { copyItem, getKeyFromUniqueId, dropItem } from '../utils';
-import { DeleteOutlined, CopyOutlined, DragOutlined } from '@ant-design/icons';
+import { useGlobal, useGlobalProps, useSet, useStore } from '../hooks';
+import {
+  copyItem,
+  getKeyFromUniqueId,
+  dropItem,
+  changeItemType,
+} from '../utils';
+import { allElements } from '../Left/elementList';
+import {
+  DeleteOutlined,
+  CopyOutlined,
+  DragOutlined,
+  SyncOutlined,
+} from '@ant-design/icons';
 import { useDrag, useDrop } from 'react-dnd';
-
+import { Modal, Select } from 'antd';
+const { Option } = Select;
 export default function Wrapper({
   $id,
   item,
@@ -12,6 +24,18 @@ export default function Wrapper({
   children,
   style,
 }) {
+  const [local, setLocal] = useSet({
+    showModal: false,
+    type: '',
+    showModal3: false,
+    schemaForImport: '',
+  });
+
+  const toggleModal = () => setLocal({ showModal: !local.showModal });
+  const handleTypeInputChange = value => {
+    setLocal({ type: value });
+  };
+
   const [position, setPosition] = useState();
   const { flatten, onItemChange, onFlattenChange } = useStore();
   const setGlobal = useGlobal();
@@ -41,7 +65,6 @@ export default function Wrapper({
       if (didDrop) {
         return;
       }
-      console.log(item.dragItem, 'tems');
       const [newFlatten, newId] = dropItem({
         dragId: item.$id, // 内部拖拽用dragId
         dragItem: item.dragItem, // 从左边栏过来的，用dragItem
@@ -130,6 +153,31 @@ export default function Wrapper({
     const [newFlatten, newId] = copyItem(flatten, $id);
     onFlattenChange(newFlatten);
     setGlobal({ selected: newId });
+  };
+
+  const handleItemTypeChangeModel = e => {
+    e.stopPropagation();
+    setLocal({ type: flatten[$id].schema.$type });
+    toggleModal();
+  };
+
+  const handleItemTypeChange = e => {
+    e.stopPropagation();
+    let newFlatten = { ...flatten };
+    try {
+      let schema = allElements.find(ele => ele.widget === local.type);
+      let newSchema = { ...schema.schema, $id: flatten[$id].$id };
+      Object.keys(newSchema).forEach(key => {
+        if (newFlatten[$id].schema.hasOwnProperty(key)) {
+          newSchema[key] = newFlatten[$id].schema[key];
+        }
+      });
+      newFlatten[$id].schema = newSchema;
+      onFlattenChange(newFlatten);
+    } catch (error) {
+      console.error(error, 'catcherror');
+    }
+    toggleModal();
   };
 
   const handleMouseEnter = () => {
@@ -255,7 +303,7 @@ export default function Wrapper({
             bottom: -2,
             right: -2,
             height: 24,
-            width: 54,
+            width: 80,
             borderTopLeftRadius: 8,
             background: '#409eff',
             display: 'flex',
@@ -283,8 +331,38 @@ export default function Wrapper({
               }}
             />
           </div>
+          <div className="pointer" onClick={handleItemTypeChangeModel}>
+            <SyncOutlined
+              style={{
+                height: 16,
+                width: 16,
+                marginRight: 12,
+                color: '#fff',
+              }}
+            />
+          </div>
         </div>
       )}
+      <Modal
+        visible={local.showModal}
+        title="更改类型"
+        onOk={handleItemTypeChange}
+        onCancel={toggleModal}
+        okText="确认"
+        cancelText="取消"
+      >
+        <Select
+          defaultValue={local.type}
+          style={{ width: 240 }}
+          onChange={handleTypeInputChange}
+        >
+          {allElements.map((e, i) => (
+            <Option value={e.widget} key={i}>
+              {e.text}
+            </Option>
+          ))}
+        </Select>
+      </Modal>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import RenderChildren from './RenderChildren';
 import RenderField from './RenderField';
 import Wrapper from './Wrapper';
 
-const FR = ({ id = '#', preview = false }) => {
+const FR = ({ id = '#', preview = false, editArea = false }) => {
   const { onItemChange, onFlattenChange, flatten } = useStore();
   const { displayType, column } = useGlobalProps();
   const item = flatten[id];

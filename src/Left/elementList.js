@@ -1,5 +1,10 @@
 // 只需写配置，方便可扩展
 const commonSettings = {
+  $type: {
+    title: '类型',
+    type: 'string',
+    'ui:readonly': true,
+  },
   $id: {
     title: 'ID',
     description: '数据存储的名称，请写英文，不能为空',
@@ -35,6 +40,10 @@ const commonSettings = {
   },
   'ui:readonly': {
     title: '置灰',
+    type: 'boolean',
+  },
+  $required: {
+    title: '必填',
     type: 'boolean',
   },
 };
@@ -367,17 +376,17 @@ const advancedElements = [
     },
     setting: {},
   },
-  {
-    text: '图片展示',
-    name: 'image',
-    // widget: 'input',
-    schema: {
-      title: '图片展示',
-      type: 'string',
-      format: 'image',
-    },
-    setting: {},
-  },
+  // {
+  //   text: '图片展示',
+  //   name: 'image',
+  //   // widget: 'input',
+  //   schema: {
+  //     title: '图片展示',
+  //     type: 'string',
+  //     format: 'image',
+  //   },
+  //   setting: {},
+  // },
   {
     text: '颜色选择',
     name: 'color',
@@ -491,7 +500,9 @@ result = result.map(list =>
   list.map(item => ({
     ...item,
     setting: { ...commonSettings, ...item.setting },
-  }))
+  })),
 );
 
 export default result;
+
+export const allElements = [...result[0], ...result[1], ...result[2]]; // 前三项是所有的组件
